@@ -76,10 +76,10 @@ RETURN = """
 #     description: Whether the app is reachable at new URL
 #     type: str
 #     returned: always
-# created:
-#     description: Whether the app got created
-#     type: bool
-#     returned: always
+installed:
+    description: Whether the app got installed
+    type: bool
+    returned: sometimes
 uninstalled:
     description: Whether the app got uninstalled
     type: bool
@@ -92,10 +92,6 @@ state:
     description: A quick description of the app state
     type: str
     returned: always
-# installed:
-#     description: Whether the app got installed
-#     type: bool
-#     returned: sometimes
 # changed_domain:
 #     description: Whether the domain needed to be changed
 #     type: bool
@@ -116,7 +112,8 @@ def get_app_info(name, verbose=False):
                 name,
             ]
         else:
-            command = ["/usr/bin/yunohost", "app", "info", "--output-as", "json", name]
+            command = ["/usr/bin/yunohost", "app",
+                       "info", "--output-as", "json", name]
         app_info_result = Popen(command, stdout=PIPE, stderr=PIPE)
         stdout, stderr = app_info_result.communicate()
 
