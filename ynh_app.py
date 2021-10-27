@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 # Copyright: (c) 2021, Hadrien <ketsapiwiq@protonmail.org>
-# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# GNU Affero General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/agpl-3.0.txt)
 
 from subprocess import Popen, PIPE
 import json
@@ -107,7 +107,9 @@ def run_module():
         settings=dict(type='dict',
                       required=False, default=dict()),
         domain=dict(type='str', required=False),
+        # TODO: not implemented
         force=dict(type='bool', required=False, default=False),
+        # TODO: not implemented
         upgraded=dict(type='bool', required=False, default=False),
         state=dict(type='str', required=False, default='present'),
     )
@@ -119,10 +121,6 @@ def run_module():
     # for consumption, for example, in a subsequent task
     result = dict(
         changed=False)
-    # result = dict(
-    #     changed=False,
-    #     old_value=None,
-    # )
 
     # the AnsibleModule object will be our abstraction working with Ansible
     # this includes instantiation, a couple of common attr would be the
@@ -133,12 +131,13 @@ def run_module():
         supports_check_mode=True
     )
 
-    # 1. We parse arguments received and check for coherence
-
+    # We parse arguments received and check for coherence
 # TODO: test and support installing a second app by playing with id and name e.g. grav__2
 
+# TODO: test coherence for this
     app_id = module.params['id'] or module.params['name']
     app_name = module.params['name'] or module.params['id']
+
     app_label = module.params['label'] or module.params['name']
     app_domain = module.params['domain']
     app_settings = module.params['settings']
@@ -150,6 +149,7 @@ def run_module():
 
 
 #  Check if app exists
+
 
     def get_app_info(name, verbose=False):
         try:
@@ -236,7 +236,9 @@ def run_module():
     else:
         module.fail_json(
             msg="Logic error: make sure 'state' is either present or absent")
-        # 4. determine changes to do
+
+        # TODO:
+        # determine changes to do
         # FIXME: confusion between app url (github repo), app 'id' ('grav') and app name / unique id / 'settings.id' ('grav__2')
         #   0. Check if changes are coherent:  you can't change "url" (but it's not supposed to be possible, since it's also the unique ID, is it?)
         #   1. Need to install? Need to uninstall?
@@ -246,30 +248,13 @@ def run_module():
         #   4. Need to upgrade?
         # 5. Build array of changed
 
-        # If no change or check mode, quit now
         # 6. If check mode, return array of planned changed stuff and quit
+        # If no change, quit now
 
         #   1. Change label if needed
         #   2. Change some settings if needed (and test reachability? Rollback if not?)
         #   3. Change domain if needed (and test reachability? Rollback if not?)
         #   4. Upgrade if needed
-
-        # result['command'] = str(command)
-
-        # Parse and return change result
-
-    # TODO: redo a non-verbose app_info to output app_id and app_version (factorize into get_app_info function)
-    # e.g.:
-    # description: A lightweight, simple to use and highly versatile wiki
-    # domain_path: yuno.doxx.fr/dokuwiki
-    # id: dokuwiki
-    # name: Wiki
-    # version: 2020-07-29~ynh4
-    # result['state'] = dict(state='present', id=app_id, version=app_version)
-
-    # else:
-    #     module.fail_json(msg='CLI rejected configuration change',
-    #                      rc=change.returncode, stdout=stdout, stderr=stderr, **result)
 
 
 def main():
