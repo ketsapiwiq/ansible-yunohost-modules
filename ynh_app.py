@@ -98,6 +98,36 @@ new_domain:
 '''
 
 
+def get_app_info(name, verbose=False):
+    try:
+        if verbose:
+            command = ['/usr/bin/yunohost',
+                       'app', 'info', '--output-as', 'json', '--full', name]
+        else:
+            command = ['/usr/bin/yunohost',
+                       'app', 'info', '--output-as', 'json', name]
+        app_info_result = Popen(
+            command,
+            stdout=PIPE,
+            stderr=PIPE
+        )
+
+        stdout, stderr = app_info_result.communicate()
+        stdout = stdout.decode('UTF-8')
+        stderr = stderr.decode('UTF-8')
+        if(app_info_result.returncode != 0):
+            if("Could not find" in stderr):
+                return False
+            else:
+                module.fail_json(msg='YunoHost returned an error for command: ' +
+                                 str(command) + '\nExit code:' + app_info_result.returncode + '\nError: ' + str(stderr), **result)
+        else:
+            return json.loads(stdout)
+    except OSError as e:
+        module.fail_json(msg='Could not run CLI with command: ' +
+                         str(command) + '\nError: ' + str(e), **result)
+
+
 def run_module():
     # define available arguments/parameters a user can pass to the module
     module_args = dict(
@@ -150,36 +180,6 @@ def run_module():
 
 #  Check if app exists
 
-
-    def get_app_info(name, verbose=False):
-        try:
-            if verbose:
-                command = ['/usr/bin/yunohost',
-                           'app', 'info', '--output-as', 'json', '--full', app_id]
-            else:
-                command = ['/usr/bin/yunohost',
-                           'app', 'info', '--output-as', 'json', app_id]
-            app_info_result = Popen(
-                command,
-                stdout=PIPE,
-                stderr=PIPE
-            )
-
-            stdout, stderr = app_info_result.communicate()
-            stdout = stdout.decode('UTF-8')
-            stderr = stderr.decode('UTF-8')
-            if(app_info_result.returncode != 0):
-                if("Could not find" in stderr):
-                    return False
-                else:
-                    module.fail_json(msg='YunoHost returned an error for command: ' +
-                                     str(command) + '\nExit code:' + app_info_result.returncode + '\nError: ' + str(stderr), **result)
-            else:
-                return json.loads(stdout)
-        except OSError as e:
-            module.fail_json(msg='Could not run CLI with command: ' +
-                             str(command) + '\nError: ' + str(e), **result)
-
     previous = get_app_info(app_name, True)
     app_was_present = True if previous else False
 
@@ -199,11 +199,13 @@ def run_module():
         if module.check_mode:
             module.exit_json(**result)
 
+        command = ['/usr/bin/yunohost',
+                   'app', 'remove', app_id]
         change = Popen(
-            ['/usr/bin/yunohost',
-                'app', 'remove', app_id],
+            command,
             stdout=PIPE,
             stderr=PIPE)
+        result['command'] = command
 
         #   If app doesn't exist, create it with given params
     elif not app_was_present and app_desired_state == 'present':
@@ -215,28 +217,24 @@ def run_module():
         if module.check_mode:
             module.exit_json(**result)
 
+        command = ['/usr/bin/yunohost',
+                   'app', 'install', app_name, '--label', app_label, '--args', app_args, '--force']
         change = Popen(
-            ['/usr/bin/yunohost',
-                'app', 'install', app_name, '--label', app_label, '--args', app_args, '--force'],
+            command,
             # domain=domain.tld&path=/path
             stdout=PIPE,
             stderr=PIPE
         )
+        result['command'] = command
+
     elif app_was_present and app_desired_state == 'present':
         # This module doesn't support app modifications yet.
         result['changed'] = False
         result['app_args'] = app_args
 
         result['msg'] = "This module doesn't support app modifications yet."
-
-        change = get_app_info(app_name)
-        result['state'] = change
+        result['state'] = get_app_info(app_name)
         module.exit_json(**result)
-
-    else:
-        module.fail_json(
-            msg="Logic error: make sure 'state' is either present or absent")
-
         # TODO:
         # determine changes to do
         # FIXME: confusion between app url (github repo), app 'id' ('grav') and app name / unique id / 'settings.id' ('grav__2')
@@ -255,6 +253,21 @@ def run_module():
         #   2. Change some settings if needed (and test reachability? Rollback if not?)
         #   3. Change domain if needed (and test reachability? Rollback if not?)
         #   4. Upgrade if needed
+
+    else:
+        module.fail_json(
+            msg="Logic error: make sure 'state' is either present or absent")
+
+    changelog = result['state'] = get_app_info(app_name)
+
+    stdout, stderr = change.communicate()
+    result['stdout'] = stdout.decode('UTF-8')
+    result['stderr'] = stderr.decode('UTF-8')
+    if(change.returncode != 0):
+        module.fail_json(
+            msg="Error when proceeding to change", **result)
+    else:
+        module.exit_json(**result)
 
 
 def main():
