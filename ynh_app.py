@@ -111,7 +111,7 @@ def run_module():
     def _get_app_info(name, verbose=False):
         if verbose:
             command = [
-                "/usr/bin/yunohost",
+                "test/bin/yunohost",
                 "app",
                 "info",
                 "--output-as",
@@ -120,7 +120,7 @@ def run_module():
                 name,
             ]
         else:
-            command = ["/usr/bin/yunohost", "app",
+            command = ["test/bin/yunohost", "app",
                        "info", "--output-as", "json", name]
         rc, stdout, stderr = module.run_command(command)
 
@@ -132,7 +132,7 @@ def run_module():
                 msg="YunoHost returned an error for command: "
                 + str(command)
                 + "\nExit code:"
-                + app_info_result.returncode
+                + str(rc)
                 + "\nError: "
                 + str(stderr),
                 **result
@@ -153,7 +153,7 @@ def run_module():
                 }
             )
             # FIXME: check cmd
-            command = ["/usr/bin/yunohost", "app",
+            command = ["test/bin/yunohost", "app",
                        "update", app_id, setting_str, new_value]
             # --output-as json?
 
@@ -177,7 +177,7 @@ def run_module():
                 }
             )
             # FIXME: action permission or reverse?
-            command = ["/usr/bin/yunohost", "user",
+            command = ["test/bin/yunohost", "user",
                        "permission", "update", app_id, action, permission]
             # --output-as json?
 
@@ -211,7 +211,8 @@ def run_module():
     # seed the result dict in the object
     # we primarily care about diff and changed
     # changed is if this module effectively modified the target
-    result = dict(changed=False, diff=list())
+    # result = dict(changed=False)
+    result = dict(changed=False, diff=list(), commands=list())
 
     # the AnsibleModule object will be our abstraction working with Ansible
     # this includes instantiation, a couple of common attr would be the
@@ -261,7 +262,7 @@ def run_module():
     #  Check if Yunohost is installed
     ########################################################################
 
-    if not os.path.isfile("/usr/bin/yunohost"):
+    if not os.path.isfile("test/bin/yunohost"):
         module.fail_json(
             msg="Yunohost is not installed on the host."
         )
@@ -275,10 +276,6 @@ def run_module():
     if app_was_present:
         app_id = app_name_or_id
 
-    result = dict(changed=False)
-
-    result.commands = list()
-
     # First, try simple changes (e.g. has to be installed or uninstalled)
 
     ########################################################################
@@ -289,7 +286,7 @@ def run_module():
 
         result["uninstalled"] = True
         result["changed"] = True
-        command = ["/usr/bin/yunohost", "app", "remove", module.params.id]
+        command = ["test/bin/yunohost", "app", "remove", module.params.id]
         # --output-as json?
 
         result["commands"].append(command)
@@ -313,7 +310,7 @@ def run_module():
         # TODO: check this label logic
         if label in module.params:
             command = [
-                "/usr/bin/yunohost",
+                "test/bin/yunohost",
                 "app",
                 "install",
                 app_name,
@@ -326,7 +323,7 @@ def run_module():
             ]
         else:
             command = [
-                "/usr/bin/yunohost",
+                "test/bin/yunohost",
                 "app",
                 "install",
                 app_name,
@@ -355,24 +352,24 @@ def run_module():
         #   Change label if needed
         ###################################################################
 
-        if label in module.params and app_label != previous.label:
+        if "label" in module.params and app_label != previous['label']:
             result["changed"] = True
             result["diff"].append(
                 {
                     "after": app_label,
                     "after_header": "label",
-                    "before": previous.label,
+                    "before": previous['label'],
                     "before_header": "label",
                 }
             )
             command = [
-                "/usr/bin/yunohost",
+                "test/bin/yunohost",
                 "user",
                 "permission",
                 "update",
                 app_id,
                 "--label",
-                app_name,
+                app_label,
             ]
 
             result["commands"].append(command)
@@ -387,7 +384,7 @@ def run_module():
                 # FIXME: if both app and domain, if some of the two, create command and exec it
 
                 command = [
-                    "/usr/bin/yunohost",
+                    "test/bin/yunohost",
                     "app",
                     "change_url",
                     app_name,
@@ -443,7 +440,7 @@ def run_module():
         if app_upgrade:
 
             command = [
-                "/usr/bin/yunohost",
+                "test/bin/yunohost",
                 "tools",
                 "update",
                 "apps",
@@ -464,7 +461,7 @@ def run_module():
             if app:
                 result["changed"] = True
                 result["upgraded"] = True
-                command = ["/usr/bin/yunohost", "app", "update", app_id]
+                command = ["test/bin/yunohost", "app", "update", app_id]
                 commands.append(command)
                 result["diff"].append(
                     {
@@ -509,7 +506,7 @@ def run_module():
         # {"allowed": [], "corresponding_users": [], "auth_header": true, "label": "Wikiwiki", "show_tile": true, "protected": false, "url": "/", "additional_urls": []}
 
         command = [
-            "yunohost",
+            "test/bin/yunohost",
             "user",
             "permission",
             "list",
@@ -523,10 +520,10 @@ def run_module():
         # if public in module.params:
         #     _change_permission('add', app_id, 'visitors')
 
-        if permissions in module.params:
-            if not module.params.append:
+        if module.params["permissions"]:
+            if not module.params["append"]:
                 for permission in list_permissions:
-                    if permission not in module.params[permissions]:
+                    if permission not in module.params["permissions"]:
                         _change_permission("delete", permission)
 
             for permission in module.params[permissions]:
