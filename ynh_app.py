@@ -100,91 +100,90 @@ commands:
     returned: always
 """
 
-########################################################################
-#  Helpers
-########################################################################
-
-
-def _get_app_info(name, verbose=False):
-    if verbose:
-        command = [
-            "/usr/bin/yunohost",
-            "app",
-            "info",
-            "--output-as",
-            "json",
-            "--full",
-            name,
-        ]
-    else:
-        command = ["/usr/bin/yunohost", "app",
-                   "info", "--output-as", "json", name]
-    rc, stdout, stderr = module.run_command(command)
-
-    if rc != 0:
-        if "Could not find" in stderr:
-            return False
-
-        module.fail_json(
-            msg="YunoHost returned an error for command: "
-            + str(command)
-            + "\nExit code:"
-            + app_info_result.returncode
-            + "\nError: "
-            + str(stderr),
-            **result
-        )
-    else:
-        return json.loads(stdout)
-
-
-def _change_setting(setting_str, new_value):
-    if (setting_str in previous.settings and new_value !=
-            previous.settings[setting_str]) or setting_str not in previous.settings:
-        result["changed"] = True
-        result["diff"].append(
-            {
-                "after": new_value,
-                "after_header": setting_str,
-                "before": previous.settings.path or None,
-                "before_header": setting_str,
-            }
-        )
-        # FIXME: check cmd
-        command = ["/usr/bin/yunohost", "app",
-                   "update", app_id, setting_str, new_value]
-        # --output-as json?
-
-        result["commands"].append(command)
-        if not module.check_mode:
-            app_change_setting[setting_str] = module.run_command(command, True)
-
-
-# TODO: list of denied as well? per permission? (not only main)
-
-def _change_permission(action, permission):
-    if (permission in permissions and new_value !=
-            previous.settings[setting_str]) or setting_str not in previous.settings:
-        result["changed"] = True
-        result["diff"].append(
-            {
-                "after": new_value,
-                "after_header": "path",
-                "before": previous.settings.path or None,
-                "before_header": "path",
-            }
-        )
-        # FIXME: action permission or reverse?
-        command = ["/usr/bin/yunohost", "user",
-                   "permission", "update", app_id, action, permission]
-        # --output-as json?
-
-        result["commands"].append(command)
-        if not module.check_mode:
-            app_change_setting[setting_str] = module.run_command(command, True)
-
 
 def run_module():
+
+    ########################################################################
+    #  Helpers
+    ########################################################################
+
+    def _get_app_info(name, verbose=False):
+        if verbose:
+            command = [
+                "/usr/bin/yunohost",
+                "app",
+                "info",
+                "--output-as",
+                "json",
+                "--full",
+                name,
+            ]
+        else:
+            command = ["/usr/bin/yunohost", "app",
+                       "info", "--output-as", "json", name]
+        rc, stdout, stderr = module.run_command(command)
+
+        if rc != 0:
+            if "Could not find" in stderr:
+                return False
+
+            module.fail_json(
+                msg="YunoHost returned an error for command: "
+                + str(command)
+                + "\nExit code:"
+                + app_info_result.returncode
+                + "\nError: "
+                + str(stderr),
+                **result
+            )
+        else:
+            return json.loads(stdout)
+
+    def _change_setting(setting_str, new_value):
+        if (setting_str in previous.settings and new_value !=
+                previous.settings[setting_str]) or setting_str not in previous.settings:
+            result["changed"] = True
+            result["diff"].append(
+                {
+                    "after": new_value,
+                    "after_header": setting_str,
+                    "before": previous.settings.path or None,
+                    "before_header": setting_str,
+                }
+            )
+            # FIXME: check cmd
+            command = ["/usr/bin/yunohost", "app",
+                       "update", app_id, setting_str, new_value]
+            # --output-as json?
+
+            result["commands"].append(command)
+            if not module.check_mode:
+                app_change_setting[setting_str] = module.run_command(
+                    command, True)
+
+    # TODO: list of denied as well? per permission? (not only main)
+
+    def _change_permission(action, permission):
+        if (permission in permissions and new_value !=
+                previous.settings[setting_str]) or setting_str not in previous.settings:
+            result["changed"] = True
+            result["diff"].append(
+                {
+                    "after": new_value,
+                    "after_header": "path",
+                    "before": previous.settings.path or None,
+                    "before_header": "path",
+                }
+            )
+            # FIXME: action permission or reverse?
+            command = ["/usr/bin/yunohost", "user",
+                       "permission", "update", app_id, action, permission]
+            # --output-as json?
+
+            result["commands"].append(command)
+            if not module.check_mode:
+                app_change_setting[setting_str] = module.run_command(
+                    command, True)
 
     ########################################################################
     #  Setup
@@ -201,7 +200,7 @@ def run_module():
         domain=dict(type="str", required=False),
         path=dict(type="str", required=False),
         append=dict(type="bool", required=False, default=False),
-        permissions=dict(type="dict", required=False, default=False),
+        permissions=dict(type="dict", required=False),
         # TODO: not implemented
         # force=dict(type="bool", required=False, default=False),
         upgraded=dict(type="bool", required=False, default=False),
@@ -228,15 +227,27 @@ def run_module():
     app_label = module.params["label"]
     # TODO: check require app_domain if install == True
     # priority being given to the upper-level params domain and path over when they're settings children
-    app_domain = module.params["domain"] or module.params["settings"]["domain"]
-    app_path = module.params["path"] or module.params["settings"]["path"]
+    app_domain = module.params["domain"]
+    if app_domain and domain in module.params["settings"]:
+        module.fail_json(
+            msg="You can't set both domain and settings.domain, please use only one of them"
+        )
+    app_path = module.params["path"]
+    if app_path and path in module.params["settings"]:
+        raise MutuallyExclusiveError(
+            "You can't set both path and settings.path, please use only one of them"
+        )
+        module.fail_json(
+            msg="You can't set both 'path' and 'settings.path' at the same time",
+        )
     # Delete domain and path values from settings dict in order to avoid setting them through the _change_setting function
     module.params["settings"].pop(
-        "domain")
-    module.params["settings"].pop("path")
+        "domain", False)  # False is default value if key doesn't exist
+    # False is default value if key doesn't exist
+    module.params["settings"].pop("path", False)
     app_settings = module.params["settings"]
     app_desired_state = module.params["state"]
-    app_public = module.params["public"]
+    # app_public = module.params["public"]
     # TODO: should we implement a reset permissions? it exists in yunohost
     app_permissions = module.params["permissions"]
     app_upgrade = module.params["upgraded"]
@@ -440,7 +451,6 @@ def run_module():
                 ),
                 False,
             )
-            #  if any(app_id == app.id for app in json.loads(stdout).apps):
             if app:
                 result["changed"] = True
                 result["upgraded"] = True
@@ -465,13 +475,10 @@ def run_module():
         #  Change settings if needed
         #######################################################################
 
-        for setting_key, setting_value in app_settings:
+        for setting_key, setting_value in app_settings.items():
             # check_mode check is done inside the function
             if setting_key != 'domain' and setting_key != 'path':
                 _change_setting(setting_key, setting_value)
-
-        # TODO: As diff?
-        # result["settings"] = app_settings
 
         #######################################################################
         #   Change permissions if needed
