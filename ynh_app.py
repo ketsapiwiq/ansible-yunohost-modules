@@ -4,6 +4,7 @@
 # GNU Affero General Public License v3.0+ (see COPYING or
 # https://www.gnu.org/licenses/agpl-3.0.txt)
 
+import os
 import json
 from urllib.parse import urlencode
 from ansible.module_utils.basic import AnsibleModule
@@ -255,6 +256,15 @@ def run_module():
     # TODO: add option to handle backup and/or purge?
 
     app_args = urlencode({**dict(domain=app_domain), **app_settings})
+
+    ########################################################################
+    #  Check if Yunohost is installed
+    ########################################################################
+
+    if not os.path.isfile("/usr/bin/yunohost"):
+        module.fail_json(
+            msg="Yunohost is not installed on the host."
+        )
 
     ########################################################################
     #  Check if app exists
