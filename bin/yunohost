@@ -1,0 +1,9 @@
+#!/usr/bin/python3
+
+# If invoked with argument "--permissions", print following json and exit
+#  {"permissions": {"dokuwiki.main": {"allowed": ["visitors", "all_users"]}, "dokuwiki.admin": {"allowed": ["user"]}}}
+
+if (len(sys.argv) == 2 and sys.argv[1] == "--permissions"):
+    print(json.dumps({"permissions": {"dokuwiki.main": {"allowed": [
+          "visitors", "all_users"]}, "dokuwiki.admin": {"allowed": ["user"]}}}))
+    sys.exit(0)
