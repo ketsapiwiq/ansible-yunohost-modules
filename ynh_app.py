@@ -24,41 +24,34 @@ description:
     - "This module calls yunohost CLI to modify apps install"
 
 options:
-    # FIXME: confusion between app url (github repo), app 'id' ('grav') and app name / unique id / 'settings.id' ('grav__2')
 
-    id:
-        description:
-            -  ID of an already existing app
-        required: false
     name:
         description:
-            -  Name, local path or git URL of the app to install
+            -  Catalog name or Git URL of an app to install or unique ID of an already existing app (e.g. `grav__2`)
         required: true
     label:
         description:
-            - The label for the installed app
+            - The label for the app
         required: false
     domain:
         description:
-            - The domain on which to install the app
+            - The domain on which the app should be available
         required: false
     settings:
         description:
-            - A dict of settings for the installed app, check app repo to know which ones to use (e.g. path)
+            - A list of key-pair settings values, check app manifest to know which ones to use (e.g. `path`)
         required: false
-    # force:
-    #     description:
-    #         - Do not ask confirmation if the app is not safe to use (low quality, experimental or 3rd party)
-    #     required: false
-    upgrade:
+    force:
         description:
-            - Upgrade app if there is an upgrade available
+            - If `yes`, do not fail if the app is not safe to use (remote Git, low quality, experimental or 3rd party)
         required: false
-        default: false
+    upgraded:
+        description:
+            - If `yes`, upgrade app if an upgrade is available
+        required: false
     append:
         description:
             - If `yes`, add permissions specified in `permissions` to the app. If `no`, only permissions specified in `permissions` will be applied to the app, removing all other permissions.
-        default: false
         required: false
     permissions:
         description:
@@ -67,7 +60,7 @@ options:
     state:
         description:
             - Whether 'present' or 'absent'
-        required: true
+        required: false
 
 author:
     - Hadrien (@ketsapiwiq)
@@ -75,43 +68,36 @@ author:
 
 EXAMPLES = """
 # Change app domain and settings
-- name: Update the default domain
+- name: Update the default domain and path
   ynh_app:
     name: wordpress
-    domain: google.com
+    domain: my.yunohost.org
     settings:
-        path: '/'
+        path: '/blog'
     label: Wordpress
 """
 
 RETURN = """
-# new_settings:
-#     description: The new settings key-values
-#     type: str
-# reachable:
-#     description: Whether the app is reachable at new URL
-#     type: str
-#     returned: always
 installed:
     description: Whether the app got installed
     type: bool
-    returned: sometimes
+    returned: changed
+upgraded:
+    description: Whether the app got upgraded
+    type: bool
+    returned: changed
 uninstalled:
     description: Whether the app got uninstalled
     type: bool
-    returned: sometimes
-command:
-    description: The command executed
-    type: str
-    returned: sometimes
-state:
-    description: A quick description of the app state
-    type: str
+    returned: changed
+url_changed:
+    description: Whether the app got its url changed
+    type: bool
+    returned: changed
+commands:
+    description: The list of change-inducing executed commands
+    type: list
     returned: always
-# changed_domain:
-#     description: Whether the domain needed to be changed
-#     type: bool
-#     returned: always
 """
 
 ########################################################################
@@ -119,7 +105,7 @@ state:
 ########################################################################
 
 
-def get_app_info(name, verbose=False):
+def _get_app_info(name, verbose=False):
     if verbose:
         command = [
             "/usr/bin/yunohost",
@@ -152,11 +138,34 @@ def get_app_info(name, verbose=False):
         return json.loads(stdout)
 
 
-def change_setting(setting_str, new_value):
+def _change_setting(setting_str, new_value):
     if (setting_str in previous.settings and new_value !=
             previous.settings[setting_str]) or setting_str not in previous.settings:
         result["changed"] = True
-        # result['settings'].append(...)
+        result["diff"].append(
+            {
+                "after": new_value,
+                "after_header": setting_str,
+                "before": previous.settings.path or None,
+                "before_header": setting_str,
+            }
+        )
+        # FIXME: check cmd
+        command = ["/usr/bin/yunohost", "app",
+                   "update", app_id, setting_str, new_value]
+        # --output-as json?
+
+        result["commands"].append(command)
+        if not module.check_mode:
+            app_change_setting[setting_str] = module.run_command(command, True)
+
+
+# TODO: list of denied as well? per permission? (not only main)
+
+def _change_permission(action, permission):
+    if (permission in permissions and new_value !=
+            previous.settings[setting_str]) or setting_str not in previous.settings:
+        result["changed"] = True
         result["diff"].append(
             {
                 "after": new_value,
@@ -165,19 +174,14 @@ def change_setting(setting_str, new_value):
                 "before_header": "path",
             }
         )
-        command = ["/usr/bin/yunohost", "app", "update", new_value]
+        # FIXME: action permission or reverse?
+        command = ["/usr/bin/yunohost", "user",
+                   "permission", "update", app_id, action, permission]
         # --output-as json?
 
         result["commands"].append(command)
         if not module.check_mode:
             app_change_setting[setting_str] = module.run_command(command, True)
-
-
-# FIXME: list of allowed or dict of allowed/denied? (or two lists?)
-
-
-def change_permission(action, permission):
-    raise NotImplementedError()
 
 
 def run_module():
@@ -195,19 +199,18 @@ def run_module():
         label=dict(type="str", required=False),
         settings=dict(type="dict", required=False, default=dict()),
         domain=dict(type="str", required=False),
+        path=dict(type="str", required=False),
         append=dict(type="bool", required=False, default=False),
         permissions=dict(type="dict", required=False, default=False),
         # TODO: not implemented
         # force=dict(type="bool", required=False, default=False),
-        upgrade=dict(type="bool", required=False, default=False),
+        upgraded=dict(type="bool", required=False, default=False),
         state=dict(type="str", required=False, default="present"),
     )
 
     # seed the result dict in the object
-    # we primarily care about diff, changed and state
+    # we primarily care about diff and changed
     # changed is if this module effectively modified the target
-    # state will include any data that you want your module to pass back
-    # for consumption, for example, in a subsequent task
     result = dict(changed=False, diff=list())
 
     # the AnsibleModule object will be our abstraction working with Ansible
@@ -221,17 +224,22 @@ def run_module():
     # name e.g. grav__2
 
     # TODO: test coherence for id and name and make it a function
-    app_id = module.params["id"] or module.params["name"]
-    app_name = module.params["name"] or module.params["id"]
+    app_name_or_id = module.params["name"]
     app_label = module.params["label"]
     # TODO: check require app_domain if install == True
-    app_domain = module.params["domain"]
+    # priority being given to the upper-level params domain and path over when they're settings children
+    app_domain = module.params["domain"] or module.params["settings"]["domain"]
+    app_path = module.params["path"] or module.params["settings"]["path"]
+    # Delete domain and path values from settings dict in order to avoid setting them through the _change_setting function
+    module.params["settings"].pop(
+        "domain")
+    module.params["settings"].pop("path")
     app_settings = module.params["settings"]
     app_desired_state = module.params["state"]
     app_public = module.params["public"]
     # TODO: should we implement a reset permissions? it exists in yunohost
     app_permissions = module.params["permissions"]
-    app_upgrade = module.params["upgrade"]
+    app_upgrade = module.params["upgraded"]
     # app_force = module.params['force']
     # TODO: add option to handle backup and/or purge?
 
@@ -241,15 +249,15 @@ def run_module():
     #  Check if app exists
     ########################################################################
 
-    previous = get_app_info(app_name, True)
+    previous = _get_app_info(app_name_or_id, True)
     app_was_present = bool(previous)
+    if app_was_present:
+        app_id = app_name_or_id
 
     result = dict(changed=False)
 
     result.commands = list()
 
-    if not (app_desired_state == "absent" or app_desired_state == "present"):
-        module.fail_on_missing_params("state")
     # First, try simple changes (e.g. has to be installed or uninstalled)
 
     ########################################################################
@@ -322,7 +330,11 @@ def run_module():
 
     elif app_was_present and app_desired_state == "present":
 
-        if app_label != previous.label:
+        ###################################################################
+        #   Change label if needed
+        ###################################################################
+
+        if label in module.params and app_label != previous.label:
             result["changed"] = True
             result["diff"].append(
                 {
@@ -347,71 +359,93 @@ def run_module():
                 rc, stdout, stderr = module.run_command(command, True)
 
             ###################################################################
-            #   Change domain if needed
+            #   Change domain and path if needed
             ###################################################################
+            if app_domain or app_path:
 
-            # FIXME: Isn't it with a custom command? or change_setting()?
-            # if previous.settings.domain and (domain in module.params or domain in module.params['settings']):
-            # new_domain = module.params['domain'] or module.params['settings']['domain']
-            # if(new_domain != previous.settings.domain):
-            #     result["changed"] = True
-            #     result["diff"].append({
-            #         "after": app_domain,
-            #         "after_header": "domain",
-            #         "before": previous.settings.domain,
-            #         "before_header": "domain"
-            #     })
+                # FIXME: if both app and domain, if some of the two, create command and exec it
 
-            if domain in module.settings:
-                # check_mode check is done inside the function
-                change_setting("domain", app_domain)
+                command = [
+                    "/usr/bin/yunohost",
+                    "app",
+                    "change_url",
+                    app_name,
+                    "--output-as",
+                    "json"
+                    "--path",
+                    app_path,
+                ]
 
-        #######################################################################
-        #   Change path if needed
-        #######################################################################
+                if previous.settings.domain and app_domain != previous.settings.domain:
+                    url_changed = True
+                    result["changed"] = True
+                    result["diff"].append({
+                        "after": app_domain,
+                        "after_header": "new_domain",
+                        "before": previous.settings.domain,
+                        "before_header": "old_domain"
+                    })
+                    command.append(
+                        "--domain",
+                        app_domain)
+                if previous.settings.path and app_path != previous.settings.path:
+                    url_changed = True
+                    result["changed"] = True
+                    result["diff"].append({
+                        "after": app_path,
+                        "after_header": "new_path",
+                        "before": previous.settings.path,
+                        "before_header": "old_path"
+                    })
+                    command.append(
+                        "--path",
+                        app_path)
 
-        # FIXME: what if path doesn't exist? check diff between path and url
-        #  FIXME: if path was not set but is being set
+                if url_changed:
+                    result["commands"].append(command)
 
-        # if path in module.settings:
-        #     # FIXME: Does this regen the nginx conf properly?
-        #     change_setting("path", module.settings['path'])
+                    if not module.check_mode:
+                        # TODO: test domain+ path has correctly been set
+                        rc, stdout, stderr = module.run_command(command, True)
+                        change_url_result = json.loads(stdout)
 
         #######################################################################
         # Upgrade if needed
         #######################################################################
+
         # Alternative cmd:
         # /usr/share/yunohost/helpers.d/utils
         # if(ynh_check_app_version_changed):
         #     ynh_upgrade_needed
 
-        command = [
-            "/usr/bin/yunohost",
-            "tools",
-            "update",
-            "apps",
-            "--output-as",
-            "json",
-        ]
+        # Should we always check for `upgradable`?
+        if app_upgrade:
 
-        rc, stdout, stderr = module.run_command(command, True)
+            command = [
+                "/usr/bin/yunohost",
+                "tools",
+                "update",
+                "apps",
+                "--output-as",
+                "json",
+            ]
 
-        app = next(
-            (
-                i
-                for i, app in enumerate(json.loads(stdout).apps)
-                if module.params["id"] == app.id
-            ),
-            False,
-        )
-        #  if any(app_id == app.id for app in json.loads(stdout).apps):
-        if app:
-            if module.params["upgrade"]:
+            rc, stdout, stderr = module.run_command(command, True)
+
+            app = next(
+                (
+                    i
+                    for i, app in enumerate(json.loads(stdout).apps)
+                    if module.params["id"] == app.id
+                ),
+                False,
+            )
+            #  if any(app_id == app.id for app in json.loads(stdout).apps):
+            if app:
                 result["changed"] = True
-                # TODO: check command
+                result["upgraded"] = True
                 command = ["/usr/bin/yunohost", "app", "update", app_id]
                 commands.append(command)
-                # TODO: get previous.version always?
                 result["diff"].append(
                     {
                         "after": app.new_version,
@@ -422,10 +456,7 @@ def run_module():
                 )
                 if not module.check_mode:
                     module.run_command(command)
-            else:
-                result["upgradable"] = True
 
-        #  Need to change label?
         # End of "if installed", settings and permissions tweaks happen in any
         # case the app should be present
     if app_desired_state == "present":
@@ -434,12 +465,10 @@ def run_module():
         #  Change settings if needed
         #######################################################################
 
-        # FIXME: check if domain and settings.domain are not both set (settings.domain should be ineffective maybe?)
-        # FIXME: don't change domain and path settings twice
-        # TODO: actually only use settings and drop domain and path no?
-        for setting in settings:
+        for setting_key, setting_value in app_settings:
             # check_mode check is done inside the function
-            change_setting(setting)
+            if setting_key != 'domain' and setting_key != 'path':
+                _change_setting(setting_key, setting_value)
 
         # TODO: As diff?
         # result["settings"] = app_settings
@@ -475,17 +504,17 @@ def run_module():
         list_permissions = json.loads(stdout)
 
         # if public in module.params:
-        #     change_permission('add', app_id, 'visitors')
+        #     _change_permission('add', app_id, 'visitors')
 
         if permissions in module.params:
             if not module.params.append:
                 for permission in list_permissions:
                     if permission not in module.params[permissions]:
-                        change_permission("delete", permission)
+                        _change_permission("delete", permission)
 
             for permission in module.params[permissions]:
                 if permission not in list_permissions:
-                    change_permission("add", permission)
+                    _change_permission("add", permission)
 
     module.exit_json(**result)
 
