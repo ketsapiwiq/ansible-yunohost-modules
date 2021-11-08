@@ -116,7 +116,7 @@ def run_module():
     def _get_app_info(name, verbose=False):
         if verbose:
             command = [
-                "test/bin/yunohost",
+                "/usr/bin/yunohost",
                 "app",
                 "info",
                 "--output-as",
@@ -125,7 +125,7 @@ def run_module():
                 name,
             ]
         else:
-            command = ["test/bin/yunohost", "app",
+            command = ["/usr/bin/yunohost", "app",
                        "info", "--output-as", "json", name]
         rc, stdout, stderr = module.run_command(command)
 
@@ -157,7 +157,7 @@ def run_module():
                     "before_header": setting_str,
                 }
             )
-            command = ["test/bin/yunohost", "app",
+            command = ["/usr/bin/yunohost", "app",
                        "setting", app_id, setting_str, "-v", new_value]
             # --output-as json?
             # TODO: append true or false for settings also? Else we should be able to delete settings with -d maybe?
@@ -189,7 +189,7 @@ def run_module():
                 "after": after,
             }
         )
-        command = ["test/bin/yunohost", "user",
+        command = ["/usr/bin/yunohost", "user",
                    "permission", action, app_id, permission, "--output-as", "json"]
 
         result["commands"].append(command)
@@ -319,7 +319,7 @@ def run_module():
     #  Check if Yunohost is installed
     ########################################################################
 
-    if not os.path.isfile("test/bin/yunohost"):
+    if not os.path.isfile("/usr/bin/yunohost"):
         module.fail_json(
             msg="Yunohost is not installed on the host."
         )
@@ -350,7 +350,7 @@ def run_module():
 
         result["uninstalled"] = True
         result["changed"] = True
-        command = ["test/bin/yunohost", "app", "remove", module.params.id]
+        command = ["/usr/bin/yunohost", "app", "remove", module.params.id]
         # --output-as json?
 
         result["commands"].append(command)
@@ -376,7 +376,7 @@ def run_module():
             module.fail_on_missing_params(["domain"])
 
         command = [
-            "test/bin/yunohost",
+            "/usr/bin/yunohost",
             "app",
             "install",
             app_name,
@@ -421,7 +421,7 @@ def run_module():
                 }
             )
             command = [
-                "test/bin/yunohost",
+                "/usr/bin/yunohost",
                 "user",
                 "permission",
                 "update",
@@ -439,7 +439,7 @@ def run_module():
             ###################################################################
 
             command = [
-                "test/bin/yunohost",
+                "/usr/bin/yunohost",
                 "app",
                 "change_url",
                 app_name,
@@ -498,7 +498,7 @@ def run_module():
         if app_upgrade:
 
             command = [
-                "test/bin/yunohost",
+                "/usr/bin/yunohost",
                 "tools",
                 "update",
                 "apps",
@@ -519,7 +519,7 @@ def run_module():
             if app:
                 result["changed"] = True
                 result["upgraded"] = True
-                command = ["test/bin/yunohost", "app", "update", app_id]
+                command = ["/usr/bin/yunohost", "app", "update", app_id]
                 commands.append(command)
                 result["diff"].append(
                     {
@@ -565,7 +565,7 @@ def run_module():
         # {"allowed": [], "corresponding_users": [], "auth_header": true, "label": "Wikiwiki", "show_tile": true, "protected": false, "url": "/", "additional_urls": []}
 
         command = [
-            "test/bin/yunohost",
+            "/usr/bin/yunohost",
             "user",
             "permission",
             "list",
