@@ -24,11 +24,16 @@ import logging
 #     app_id,
 #     "--output-as",
 #     "json",
-if (len(sys.argv) == 2 and sys.argv[1] == "user" and sys.argv[2] == "permission" and sys.argv[3] == "list"):
+if (sys.argv[1] == "user" and sys.argv[2] == "permission" and sys.argv[3] == "list"):
     print(json.dumps({"permissions": {"dokuwiki.main": {"allowed": [
         "visitors", "all_users"]}, "dokuwiki.admin": {"allowed": ["user"]}}}))
+# then check if command is "test/bin/yunohost app install patate --args domain=None --force --output-as json" and return mockup json answer
+elif (sys.argv[1] == "app" and sys.argv[2] == "install" and sys.argv[3] == "patate" and sys.argv[4] == "--args"):
+    print(json.dumps({"id": "patate", "app_name": "patate", "app_description": "patate", "app_icon": "patate", "app_url": "patate", "app_category": "patate", "app_version": "patate", "label": "patate", "app_permissions": {"dokuwiki.main": {"allowed": [
+        "visitors", "all_users"]}, "dokuwiki.admin": {"allowed": ["user"]}}}))
 else:
-    print(json.dumps({"label": "DokuWiki", "icon": "dokuwiki.png"}))
+    sys.exit("Could not find")
+    # print(json.dumps({"label": "DokuWiki", "icon": "dokuwiki.png"}))
     # print("Invoked with following args: %s" % sys.argv)
 sys.exit(0)
 
