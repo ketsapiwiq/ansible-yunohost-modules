@@ -5,6 +5,7 @@
 # https://www.gnu.org/licenses/agpl-3.0.txt)
 
 import os
+import re
 import json
 from urllib.parse import urlencode
 from ansible.module_utils.basic import AnsibleModule
@@ -99,6 +100,10 @@ commands:
     description: The list of change-inducing executed commands
     type: list
     returned: always
+id:
+    description: The ID of the app, useful when app got installed and it's a multi-instance install (e.g. `id=grav__2`)
+    type: str
+    returned: always
 """
 
 
@@ -152,10 +157,10 @@ def run_module():
                     "before_header": setting_str,
                 }
             )
-            # FIXME: check cmd
             command = ["test/bin/yunohost", "app",
-                       "update", app_id, setting_str, new_value]
+                       "setting", app_id, setting_str, "-v", new_value]
             # --output-as json?
+            # TODO: append true or false for settings also? Else we should be able to delete settings with -d maybe?
 
             result["commands"].append(command)
             if not module.check_mode:
@@ -165,26 +170,32 @@ def run_module():
     # TODO: list of denied as well? per permission? (not only main)
 
     def _change_permission(action, permission):
-        if (permission in permissions and new_value !=
-                previous.settings[setting_str]) or setting_str not in previous.settings:
-            result["changed"] = True
-            result["diff"].append(
-                {
-                    "after": new_value,
-                    "after_header": "path",
-                    "before": previous.settings.path or None,
-                    "before_header": "path",
-                }
-            )
-            # FIXME: action permission or reverse?
-            command = ["test/bin/yunohost", "user",
-                       "permission", "update", app_id, action, permission]
-            # --output-as json?
+        result["changed"] = True
+        if action == "add":
+            before = None,
+            after = permission
+        elif action == "remove":
+            after = None
+            before = permission
+        else:
+            module.fail_json(
+                msg="Unknown permission action: " + str(action), **result)
 
-            result["commands"].append(command)
-            if not module.check_mode:
-                app_change_setting[setting_str] = module.run_command(
-                    command, True)
+        result["diff"].append(
+            {
+                "before_header": "old permission {permission}",
+                "after_header": "new permission {permission}",
+                "before": before,
+                "after": after,
+            }
+        )
+        command = ["test/bin/yunohost", "user",
+                   "permission", action, app_id, permission, "--output-as", "json"]
+
+        result["commands"].append(command)
+        if not module.check_mode:
+            app_change_setting[setting_str] = module.run_command(
+                command, True)
 
     ########################################################################
     #  Setup
@@ -193,7 +204,6 @@ def run_module():
     # define available arguments/parameters a user can pass to the module
     # module.require_one_of("id", "name")
     module_args = dict(
-        #         # FIXME: confusion between app url (github repo), app 'id' ('grav') and app name / unique id / 'settings.id' ('grav__2')
         id=dict(type="str", required=False),
         name=dict(type="str", required=False),
         label=dict(type="str", required=False),
@@ -221,39 +231,86 @@ def run_module():
     module = AnsibleModule(argument_spec=module_args, supports_check_mode=True)
 
     # We parse arguments received and check for coherence
-    # TODO: test and support installing a second app by playing with id and
-    # name e.g. grav__2
 
-    # TODO: test coherence for id and name and make it a function
-    app_name_or_id = module.params["name"]
+    # TODO: make it a function? check all cases
+    app_id = module.params["id"]
+    app_name = module.params["name"]
+
+    if app_id:
+        # if app_id ends with " __[0-9]+", extract the first part
+        # if re.match(r"^.* __[0-9]+$", app_id):
+        app_id_prefix = re.sub(r"__[0-9]+$", "", app_id)
+        result["id"] = app_id
+
+        # check if app_name and app_id are both set
+        if app_name:
+            if app_id_prefix != app_name:
+                module.fail_json(
+                    msg="Incoherent id and name, you should either set only id or name, or if you set both (e.g. to install a second instance of the same app), id should be of the form: `name__number`",
+                    **result
+                )
+        else:
+            app_name = app_id_prefix
+            result["name"] = app_name
+    elif not app_name:
+        # TODO: handle this with "requireatleastone" ansible check
+        module.fail_json(
+            msg="You should either set id or name",
+            **result
+        )
+    else:
+        # app_id is not set and
+        # app_name could be a url or a name
+        # so we can't simply do app_id = app_name
+        # check if app_name is a url
+        if re.match(r"^https?://", app_name):
+            # this is an url, we can extract the name from it because app_id = [app_name]_ynh
+            # TODO: we can use functions from yunohost/src/app.py instead to extract name from URL in a more reliable way
+            m = re.match(r"([A-z0-9_-])+_ynh", app_name)
+            if m:
+                app_id = m.group(1)
+                result["id"] = app_id
+            else:
+                module.fail_json(
+                    msg="Could not extract name from URL",
+                    **result
+                )
+        else:
+            app_id = app_name
+            result["id"] = app_id
+
     app_label = module.params["label"]
-    # TODO: check require app_domain if install == True
     # priority being given to the upper-level params domain and path over when they're settings children
-    app_domain = module.params["domain"]
-    if app_domain and domain in module.params["settings"]:
+    app_domain = module.params["domain"] or module.params["settings"].get(
+        "domain")
+    if app_domain and "domain" in module.params["settings"] and module.params["settings"]["domain"] != app_domain:
         module.fail_json(
             msg="You can't set both domain and settings.domain, please use only one of them"
         )
-    app_path = module.params["path"]
-    if app_path and path in module.params["settings"]:
-        raise MutuallyExclusiveError(
-            "You can't set both path and settings.path, please use only one of them"
-        )
+    app_path = module.params["path"] or module.params["settings"].get("path")
+
+    if app_path and "path" in module.params["settings"] and module.params["settings"]["path"] != app_path:
+        # raise MutuallyExclusiveError(
+        #     "You can't set both path and settings.path, please use only one of them"
+        # )
+        # module.fail_on_mutually_exclusive(
+        #     [
+        #         ("domain", "path"),
+        #         ("domain", "settings.domain"),
+        #         ("path", "settings.path"),
+        #     ]
+        # )
         module.fail_json(
             msg="You can't set both 'path' and 'settings.path' at the same time",
         )
-    # Delete domain and path values from settings dict in order to avoid setting them through the _change_setting function
-    module.params["settings"].pop(
-        "domain", False)  # False is default value if key doesn't exist
-    # False is default value if key doesn't exist
-    module.params["settings"].pop("path", False)
+
     app_settings = module.params["settings"]
     app_desired_state = module.params["state"]
     # app_public = module.params["public"]
-    # TODO: should we implement a reset permissions? it exists in yunohost
+    # TODO: should we implement a reset permissions? (= implement actions) it exists in yunohost (= all_users)
     app_permissions = module.params["permissions"]
     app_upgrade = module.params["upgraded"]
-    # app_force = module.params['force']
+    # app_force = module.params['force'] # by default
     # TODO: add option to handle backup and/or purge?
 
     app_args = urlencode({**dict(domain=app_domain), **app_settings})
@@ -271,12 +328,19 @@ def run_module():
     #  Check if app exists
     ########################################################################
 
-    previous = _get_app_info(app_name_or_id, True)
+    previous = _get_app_info(app_id, True)
     app_was_present = bool(previous)
     if app_was_present:
-        app_id = app_name_or_id
+        # FIXME: make sure it's the correct previous variable for app_name
+        app_name = previous["name"]
 
-    # First, try simple changes (e.g. has to be installed or uninstalled)
+    ########################################################################
+    # Check if we need to install a second instance
+    ########################################################################
+
+    # module params to make the app install a second instance: specify id with ([a-z])__[0-9]+ and make it deduct if app doesn't exist that you have to install an app with name if specified or name="([a-z])"
+
+    # Then, try simple changes (e.g. has to be installed or uninstalled)
 
     ########################################################################
     #  Uninstall if needed
@@ -297,7 +361,7 @@ def run_module():
         app_uninstall_result = module.run_command(command, True)
 
     ########################################################################
-    #   If app doesn't exist, create it with given params
+    #   If app doesn't exist, install it with given params
     ########################################################################
 
     elif not app_was_present and app_desired_state == "present":
@@ -305,42 +369,36 @@ def run_module():
         result["installed"] = True
         result["changed"] = True
         result["install_app_args"] = app_args
-        # use result.diff?
 
-        # TODO: check this label logic
-        if label in module.params:
-            command = [
-                "test/bin/yunohost",
-                "app",
-                "install",
-                app_name,
+        # Domain is mandatory for installing apps
+
+        if not app_domain:
+            module.fail_on_missing_params(["domain"])
+
+        command = [
+            "test/bin/yunohost",
+            "app",
+            "install",
+            app_name,
+            "--args",
+            app_args,
+            "--force",
+            "--output-as",
+            "json",
+        ]
+        if app_label:
+            command.append(
                 "--label",
-                app_label,
-                "--args",
-                app_args,
-                "--force",
-                # --output-as json ?
-            ]
-        else:
-            command = [
-                "test/bin/yunohost",
-                "app",
-                "install",
-                app_name,
-                "--args",
-                app_args,
-                "--force",
-                "--output-as",
-                "json",
-            ]
+                app_label)
 
         result["commands"].append(command)
 
         if not module.check_mode:
-            # TODO: test domain+ path has correctly been set
+            # TODO: test domain+ path has correctly been set?
             rc, stdout, stderr = module.run_command(command, True)
-            # TODO: test app_id has correctly been set
-            app_id = json.loads(stdout).id
+            result["id"] = app_id
+            # FIXME: test app_id has correctly been set
+            app_id = json.loads(stdout)['id']
 
     ########################################################################
     # If already installed, change app install
@@ -352,7 +410,7 @@ def run_module():
         #   Change label if needed
         ###################################################################
 
-        if "label" in module.params and app_label != previous['label']:
+        if app_label and app_label != previous['label']:
             result["changed"] = True
             result["diff"].append(
                 {
@@ -379,21 +437,21 @@ def run_module():
             ###################################################################
             #   Change domain and path if needed
             ###################################################################
-            if app_domain or app_path:
 
-                # FIXME: if both app and domain, if some of the two, create command and exec it
+            command = [
+                "test/bin/yunohost",
+                "app",
+                "change_url",
+                app_name,
+                "--output-as",
+                "json"
+            ]
 
-                command = [
-                    "test/bin/yunohost",
-                    "app",
-                    "change_url",
-                    app_name,
-                    "--output-as",
-                    "json"
-                    "--path",
-                    app_path,
-                ]
+            # if both app and domain, append both params,
+            # if only one, append one
+            # if none, do nothing
 
+            if app_domain:
                 if previous.settings.domain and app_domain != previous.settings.domain:
                     url_changed = True
                     result["changed"] = True
@@ -406,6 +464,7 @@ def run_module():
                     command.append(
                         "--domain",
                         app_domain)
+            if app_path:
                 if previous.settings.path and app_path != previous.settings.path:
                     url_changed = True
                     result["changed"] = True
@@ -423,7 +482,6 @@ def run_module():
                     result["commands"].append(command)
 
                     if not module.check_mode:
-                        # TODO: test domain+ path has correctly been set
                         rc, stdout, stderr = module.run_command(command, True)
                         change_url_result = json.loads(stdout)
 
@@ -484,6 +542,7 @@ def run_module():
 
         for setting_key, setting_value in app_settings.items():
             # check_mode check is done inside the function
+            # Ignore domain and path values in order to avoid setting them through the _change_setting function
             if setting_key != 'domain' and setting_key != 'path':
                 _change_setting(setting_key, setting_value)
 
@@ -494,7 +553,7 @@ def run_module():
         # yunohost user permission list dokuwiki --output-as json
         # {"permissions": {"dokuwiki.main": {"allowed": ["visitors", "all_users"]}, "dokuwiki.admin": {"allowed": ["user"]}}}
 
-        # TODO: Check alias is done between app.main and app
+        # TODO: Check alias is needed between app.main and app
         #         root@ynh:~# yunohost user permission add dokuwiki visitors all_users --output-as json
         # Warning: Group 'visitors' already has permission 'dokuwiki.main' enabled
         # Warning: Group 'all_users' already has permission 'dokuwiki.main' enabled
@@ -510,25 +569,26 @@ def run_module():
             "user",
             "permission",
             "list",
+            # app_id + ".main",
             app_id,
             "--output-as",
             "json",
         ]
         rc, stdout, stderr = module.run_command(command, True)
-        list_permissions = json.loads(stdout)
+        old_permissions = json.loads(stdout)
 
         # if public in module.params:
         #     _change_permission('add', app_id, 'visitors')
 
-        if module.params["permissions"]:
+        if app_permissions:
             if not module.params["append"]:
-                for permission in list_permissions:
-                    if permission not in module.params["permissions"]:
-                        _change_permission("delete", permission)
+                for old_permission in old_permissions:
+                    if old_permission not in app_permissions:
+                        _change_permission("delete", old_permission)
 
-            for permission in module.params[permissions]:
-                if permission not in list_permissions:
-                    _change_permission("add", permission)
+            for new_permission in app_permissions:
+                if new_permission not in old_permissions:
+                    _change_permission("add", new_permission)
 
     module.exit_json(**result)
 
