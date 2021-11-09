@@ -1,2 +1,0 @@
-/usr/local/bin/python3 /Users/hadrien/git/ansible-yunohost-modules/ynh_app.py '{"ANSIBLE_MODULE_ARGS": {"name":"patate", "domain": "yuno.patate.fr"}}'
-/usr/local/bin/python3 /Users/hadrien/git/ansible-yunohost-modules/ynh_app.py '{"ANSIBLE_MODULE_ARGS": {"name":"patate"}}'

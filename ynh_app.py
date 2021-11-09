@@ -319,7 +319,7 @@ def run_module():
     #  Check if Yunohost is installed
     ########################################################################
 
-    if not os.path.isfile("/usr/bin/yunohost"):
+    if not os.path.exists("/usr/bin/yunohost"):
         module.fail_json(
             msg="Yunohost is not installed on the host."
         )
@@ -396,9 +396,9 @@ def run_module():
         if not module.check_mode:
             # TODO: test domain+ path has correctly been set?
             rc, stdout, stderr = module.run_command(command, True)
+            app_id = json.loads(stdout)['id']
             result["id"] = app_id
             # FIXME: test app_id has correctly been set
-            app_id = json.loads(stdout)['id']
 
     ########################################################################
     # If already installed, change app install
@@ -564,23 +564,24 @@ def run_module():
         # Warning: Group 'all_users' already has permission 'dokuwiki.main' disabled
         # {"allowed": [], "corresponding_users": [], "auth_header": true, "label": "Wikiwiki", "show_tile": true, "protected": false, "url": "/", "additional_urls": []}
 
-        command = [
-            "/usr/bin/yunohost",
-            "user",
-            "permission",
-            "list",
-            # app_id + ".main",
-            app_id,
-            "--output-as",
-            "json",
-        ]
-        rc, stdout, stderr = module.run_command(command, True)
-        old_permissions = json.loads(stdout)
-
         # if public in module.params:
         #     _change_permission('add', app_id, 'visitors')
 
         if app_permissions:
+            command = [
+                "/usr/bin/yunohost",
+                "user",
+                "permission",
+                "list",
+                # app_id + ".main",
+                app_id,
+                "--output-as",
+                "json",
+            ]
+
+            rc, stdout, stderr = module.run_command(command, True)
+            old_permissions = json.loads(stdout)
+
             if not module.params["append"]:
                 for old_permission in old_permissions:
                     if old_permission not in app_permissions:
