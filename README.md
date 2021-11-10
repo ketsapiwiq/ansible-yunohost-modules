@@ -31,14 +31,14 @@ ynh_app:
 - name: Change domain and path
   ynh_app:
         name: dokuwiki
-        domain: yuno.doxx.fr
+        domain: yuno.example.org
         path: /wiki
 
 - name: Change label, domain and path
   ynh_app:
     name: dokuwiki
     settings:
-        domain: doxx.fr
+        domain: example.org
     label: Spaghetti
     path: /doku
 
@@ -61,7 +61,7 @@ ynh_app:
     id: dokuwiki__2
     name: dokuwiki
     label: DokuWiki 2
-    domain: yuno.doxx.fr
+    domain: yuno.example.org
     settings:
         path: /wiki2
 
@@ -69,7 +69,7 @@ ynh_app:
   ynh_app:
     id: dokuwiki__3
     label: DokuWiki 3
-    domain: yuno.doxx.fr
+    domain: yuno.example.org
     path: /wiki3
     append: no
     permissions:
