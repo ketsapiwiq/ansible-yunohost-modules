@@ -41,26 +41,19 @@ def fail_json(*args, **kwargs):
 def os_ynh_present(self): return True
 
 
-def run_command_nonexisting(self, command, check_rc=False):
+def yunohost(self, command, check_rc=False):
     """Mock run_command when app doesn't exist"""
     if command[1] == "app":
         # if command[2] == "list":
         #     return (0, "{'apps': []}", "")
-        if command[2] == "info":
-            return (1, "", "Could not find app")
+        # if command[2] == "info":
+        #     return (1, "", "Could not find app")
         elif command[2] == "install":
             return (0, '{"name": "app", "id": "app"}', "")
-
-
-def run_command_existing(self, command, check_rc=False):
-    """Mock run_command when app exists"""
-    if command[1] == "app":
         if command[2] == "list":
             return (0, '{"apps": {"patate": {"domain": "yuno.patate.fr", "installed": true}', "")
         elif command[2] == "info":
             return (0, "{'name': 'test', 'description': 'test', 'state': 'installed', 'type': 'app', 'path': '/home/test/test'}", "")
-        elif command[2] == "install":
-            return (1, "{'error': 'app already exists'}", "")
 
 
 class TestYnhApp(unittest.TestCase):
@@ -69,7 +62,7 @@ class TestYnhApp(unittest.TestCase):
         self.mock_module_helper = patch.multiple(basic.AnsibleModule,
                                                  exit_json=exit_json,
                                                  fail_json=fail_json,
-                                                 )
+                                                 yunohost=yunohost)
         self.mock_module_helper_os = patch.object(
             os.path, "exists", os_ynh_present)
         self.mock_module_helper.start()
@@ -87,8 +80,7 @@ class TestYnhApp(unittest.TestCase):
             {"name": "patate", "domain": "yuno.patate.fr"}
         )
 
-        with patch.object(basic.AnsibleModule, 'run_command',
-                          run_command_nonexisting) as mock_nonexisting:
+        with patch.object(basic.AnsibleModule, '_get_info') as mock_nonexisting:
 
             with self.assertRaises(AnsibleExitJson) as result:
                 ynh_app.main()
@@ -109,7 +101,7 @@ class TestYnhApp(unittest.TestCase):
         )
 
         with patch.object(basic.AnsibleModule, 'run_command', run_command_existing) as mock_existing:
-
+            mock_existing = run_command_existing(self, command)
             with self.assertRaises(AnsibleExitJson) as result:
                 ynh_app.main()
             # ensure result is changed
