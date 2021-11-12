@@ -207,13 +207,13 @@ def run_module():
 
     def _change_setting(setting_str, new_value):
         if (setting_str in previous["settings"] and new_value !=
-                previous["settings"][setting_str]) or setting_str not in previous["settings"]:
+                previous["settings"].get(setting_str)) or setting_str not in previous["settings"]:
             result["changed"] = True
             result["diff"].append(
                 {
                     "after": new_value+"\n",
                     "after_header": "setting "+setting_str+"\n",
-                    "before": previous["settings"]["path"] or None,
+                    "before": previous["settings"].get(setting_str) or None,
                     "before_header": "setting "+setting_str+"\n",
                 }
             )
@@ -612,10 +612,13 @@ def run_module():
         #  Change settings if needed
         #######################################################################
         if app_settings:
-            for setting_key, setting_value in app_settings.items():
+            for setting_key in app_settings.keys():
+
                 # check_mode check is done inside the function
                 # Ignore domain and path values in order to avoid setting them through the _change_setting function
                 if setting_key != 'domain' and setting_key != 'path':
+                    setting_value = str(app_settings.get(setting_key))
+
                     _change_setting(setting_key, setting_value)
 
         #######################################################################
