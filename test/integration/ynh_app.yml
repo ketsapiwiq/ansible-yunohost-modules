@@ -1,95 +1,127 @@
-- name: Uninstall app
-  ynh_app:
-    name: dokuwiki
-    state: absent
-  ignore_errors: yes
+---
+- hosts: test
 
-- name: Install app
-  ynh_app:
-    name: dokuwiki
-    label: DokuWiki
-    domain: yuno.doxx.fr
-    settings:
-      path: /wiki
+  tasks:
+    - name: Uninstall app
+      ynh_app:
+        name: dokuwiki
+        state: absent
+      ignore_errors: yes
 
-- name: Change path
-  ynh_app:
-    name: dokuwiki
-    label: DokuWiki
-    settings:
-      path: /dokuwiki
+    - name: Install app
+      ynh_app:
+        name: dokuwiki
+        label: DokuWiki
+        domain: yuno.doxx.fr
+        settings:
+          path: /wikiwiki
 
-- name: Change domain
-  ynh_app:
-    name: dokuwiki
-    label: DokuWiki
-    domain: doxx.fr
+    - name: Change path
+      ynh_app:
+        name: dokuwiki
+        label: DokuWiki
+        settings:
+          path: /dokuwiki
 
-- name: Change domain and path
-  ynh_app:
-    name: dokuwiki
-    domain: yuno.doxx.fr
-    settings:
-      path: /wiki
+    - name: Change domain
+      ynh_app:
+        name: dokuwiki
+        label: DokuWiki
+        domain: doxx.fr
 
-- name: Change label, domain and path
-  ynh_app:
-    name: dokuwiki
-    settings:
-      domain: doxx.fr
-    label: Spaghetti
-    path: /doku
+    - name: Change domain and path
+      ynh_app:
+        name: dokuwiki
+        domain: yuno.doxx.fr
+        settings:
+          path: /wookie
 
-- name: Change permissions
-  ynh_app:
-    name: dokuwiki
-    append: no
-    permissions:
-      - all_users
-  tags:
-    - permissions
+    - name: Change label, domain and path
+      ynh_app:
+        name: dokuwiki
+        settings:
+          domain: doxx.fr
+        label: Spaghetti
+        path: /doku
 
-- name: Change permissions
-  ynh_app:
-    name: dokuwiki
-    append: yes
-    permissions:
-      - visitors
-  tags:
-    - permissions
+    - name: Change permissions 1
+      ynh_app:
+        name: dokuwiki
+        append: no
+        permissions:
+          - all_users
+      tags:
+        - permissions
 
-- name: Add second instance
-  ynh_app:
-    id: dokuwiki__2
-    name: dokuwiki
-    label: DokuWiki 2
-    domain: yuno.doxx.fr
-    settings:
-      path: /wiki2
+    - name: Change permissions 2
+      ynh_app:
+        name: dokuwiki
+        append: yes
+        permissions:
+          - visitors
+      tags:
+        - permissions
 
-- name: Add third instance
-  ynh_app:
-    id: dokuwiki__3
-    label: DokuWiki 3
-    domain: yuno.doxx.fr
-    path: /wiki3
-    append: no
-    permissions:
-      - lucas
-  tags:
-    - permissions
+    - name: Add second instance
+      ynh_app:
+        id: dokuwiki__2
+        name: dokuwiki
+        label: DokuWiki 2
+        domain: yuno.doxx.fr
+        settings:
+          path: /wiki2
+          is_public: true
+          admin: lucas
+      tags:
+        - permissions
 
-- name: Remove second instance
-  ynh_app:
-    name: dokuwiki__2
-    state: absent
+    - name: Change permissions 3
+      ynh_app:
+        id: dokuwiki__2
+        append: no
+        permissions:
+          - all_users
+      tags:
+        - permissions
 
-- name: Remove third instance
-  ynh_app:
-    id: dokuwiki__3
-    name: dokuwiki
-    state: absent
-    permissions:
-      - lucas
-  tags:
-    - permissions
+    - name: Change permissions 4
+      ynh_app:
+        id: dokuwiki__2
+        append: no
+        settings:
+          is_public: true
+          admin: lucas
+      tags:
+        - permissions
+
+    - name: Add third instance
+      ynh_app:
+        id: dokuwiki__3
+        label: DokuWiki 3
+        domain: yuno.doxx.fr
+        path: /wiki3
+        append: no
+        permissions:
+          - lucas
+      tags:
+        - permissions
+
+    - name: Remove second instance
+      ynh_app:
+        name: dokuwiki__2
+        state: absent
+        settings:
+          is_public: true
+          admin: lucas
+      tags:
+        - permissions
+
+    - name: Remove third instance
+      ynh_app:
+        id: dokuwiki__3
+        name: dokuwiki
+        state: absent
+        permissions:
+          - lucas
+      tags:
+        - permissions
