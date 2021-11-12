@@ -30,7 +30,11 @@ options:
     name:
         description:
             -  Catalog name or Git URL of an app to install or unique ID of an already existing app (e.g. `grav__2`)
-        required: true
+        required: false
+    id:
+        description:
+            -  Catalog name or Git URL of an app to install or unique ID of an already existing app (e.g. `grav__2`)
+        required: false
     label:
         description:
             - The label for the app
@@ -84,9 +88,9 @@ ynh_app:
 
 - name: Change domain and path
   ynh_app:
-        name: dokuwiki
-        domain: yuno.example.org
-        path: /wiki
+    name: dokuwiki
+    domain: yuno.example.org
+    path: /wiki
 
 - name: Change label, domain and path
   ynh_app:
@@ -607,12 +611,12 @@ def run_module():
         #######################################################################
         #  Change settings if needed
         #######################################################################
-
-        for setting_key, setting_value in app_settings.items():
-            # check_mode check is done inside the function
-            # Ignore domain and path values in order to avoid setting them through the _change_setting function
-            if setting_key != 'domain' and setting_key != 'path':
-                _change_setting(setting_key, setting_value)
+        if app_settings:
+            for setting_key, setting_value in app_settings.items():
+                # check_mode check is done inside the function
+                # Ignore domain and path values in order to avoid setting them through the _change_setting function
+                if setting_key != 'domain' and setting_key != 'path':
+                    _change_setting(setting_key, setting_value)
 
         #######################################################################
         #   Change permissions if needed
